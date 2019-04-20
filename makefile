@@ -1,16 +1,24 @@
 
-CFLAGS = -g -O0 -Wall -Wmissing-prototypes -pthread `pkg-config sdl2 glew gl --cflags`
-#CFLAGS = -O3 -Wall -Wmissing-prototypes -pthread `pkg-config sdl2 glew gl --cflags`
+#CFLAGS = -O3 -Wall -Wmissing-prototypes -pthread
+# Debug flags
+CFLAGS = -g -O0 -Wall -Wmissing-prototypes -pthread `pkg-config gtest --cflags`
+CXXFLAGS = -std=c++17 -Itests/gtest/googletests/include
 
-LDFLAGS = -pthread `pkg-config sdl2 glew gl --libs`
+LDFLAGS = -lpthread 
+TESTFLAGS = `pkg-config gtest --libs`
 
-OBJECTS = list.o
+OBJECTS = list.o scheduler.o
+TESTOBJECTS = $(wildcard tests/*.cpp)
 
-all: main test
+TARGET = main
+TESTTARGET = testmain
 
-main: $(OBJECTS)
+all: $(TARGET) $(TESTTARGET)
 
-test: $(OBJECTS)
+$(TARGET): $(OBJECTS)
+
+$(TESTTARGET): $(TESTOBJECTS) list.o
+	$(CXX) $(LDFLAGS) $(TESTFLAGS) $(TESTOBJECTS) list.o -o $(TESTTARGET)
 
 clean:
-	$(RM) *.o main test
+	$(RM) *.o $(TARGET) $(TESTTARGET)
