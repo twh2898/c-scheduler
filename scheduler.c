@@ -10,6 +10,13 @@ struct scheduler {
     pthread_mutex_t tasks_lock;
 };
 
+enum task_state {
+	STARTING,
+	RUNNING,
+	INTERRUPTED,
+	STOPPED,
+};
+
 struct task {
     struct list_elem elem;
 
@@ -19,6 +26,8 @@ struct task {
     task_fn_t interrupt;
     task_cond_t is_done;
     void *data;
+
+	enum task_state state;
 };
 
 struct task *task_new(task_fn_t init,
@@ -44,6 +53,7 @@ struct task *task_new(task_fn_t init,
     task->interrupt = interrupt;
     task->is_done = is_done;
     task->data = data;
+	task->state = STARTING;
 
     return task;
 }
@@ -69,11 +79,7 @@ struct scheduler *scheduler_new() {
 static struct list_elem *scheduler_remove(struct scheduler *sched,
                                           struct task *task) {
     struct list_elem *next = list_remove(&task->elem);
-
-    if (task->destroy) {
-        task->destroy(task->data);
-    }
-
+    if (task->destroy) task->destroy(task->data);
     return next;
 }
 
@@ -82,6 +88,7 @@ void scheduler_free(struct scheduler *sched) {
     struct list_elem *e;
     for (e = list_begin(&sched->tasks); e != list_end(&sched->tasks);) {
         struct task *task = list_entry(e, struct task, elem);
+		if (task->interrupt) task->interrupt(task->data);
         e = scheduler_remove(sched, task);
     }
 
@@ -98,23 +105,39 @@ void scheduler_run(struct scheduler *sched) {
         e = list_next(e);
 
         pthread_mutex_unlock(&sched->tasks_lock);
-        task->run(task->data);
+		switch (task->state) {
+			case STARTING:
+				if (task->init) task->init(task->data);
+				task->state = RUNNING;
+			case RUNNING:
+				task->run(task->data);
+				if (!task->is_done || task->is_done(task->data))
+					task->state = STOPPED;
+				break;
+			case INTERRUPTED:
+				if (task->interrupt) task->interrupt(task->data);
+				task->state = STOPPED;
+				break;
+			case STOPPED:
+				e = scheduler_remove(sched, task);
+				break;
+		}
         pthread_mutex_lock(&sched->tasks_lock);
-
-        if (task->is_done == NULL || task->is_done(task->data)) {
-            e = scheduler_remove(sched, task);
-        }
     }
 
     pthread_mutex_unlock(&sched->tasks_lock);
 }
 
-void scheduler_add(struct scheduler *sched, struct task *task) {
+void scheduler_start(struct scheduler *sched, struct task *task) {
     pthread_mutex_lock(&sched->tasks_lock);
     list_push_back(&sched->tasks, &task->elem);
+	task->state = STARTING;
     pthread_mutex_unlock(&sched->tasks_lock);
-
-    if (task->init) {
-        task->init(task->data);
-    }
 }
+
+void scheduler_stop(struct scheduler *sched, struct task *task) {
+	pthread_mutex_lock(&sched->tasks_lock);
+	task->state = INTERRUPTED;
+	pthread_mutex_unlock(&sched->tasks_lock);
+}
+

@@ -44,7 +44,9 @@ void scheduler_free(struct scheduler *);
 
 void scheduler_run(struct scheduler *);
 
-void scheduler_add(struct scheduler *, struct task *);
+void scheduler_start(struct scheduler *, struct task *);
+
+void scheduler_stop(struct scheduler *, struct task *);
 
 #ifdef __cplusplus
 }

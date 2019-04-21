@@ -48,6 +48,7 @@ namespace {
 		EXPECT_EQ(interrupt, t->interrupt);
 		EXPECT_EQ(is_done, t->is_done);
 		EXPECT_EQ(&data, t->data);
+		EXPECT_EQ(STARTING, t->state);
 		task_free(t);
 
 		t = task_new(NULL, run, NULL, NULL, NULL, NULL);
@@ -57,8 +58,10 @@ namespace {
 		EXPECT_EQ(NULL, t->interrupt);
 		EXPECT_EQ(NULL, t->is_done);
 		EXPECT_EQ(NULL, t->data);
+		EXPECT_EQ(STARTING, t->state);
+		EXPECT_EQ(STARTING, t->state);
 		task_free(t);
-	}
+}
 
 	TEST(SchedulerTest, SchedulerInit) {
 		auto s = scheduler_new();
@@ -72,35 +75,46 @@ namespace {
 		scheduler_free(s);
 	}
 
-	static void expect_data(struct TestStruct& data,
-			int n_init,
-			int n_run,
-			int n_destroy,
-			int n_interrupt,
-			int n_is_done) {
-		EXPECT_EQ(n_init, data.n_init);
-		EXPECT_EQ(n_run, data.n_run);
-		EXPECT_EQ(n_destroy, data.n_destroy);
-		EXPECT_EQ(n_interrupt, data.n_interrupt);
-		EXPECT_EQ(n_is_done, data.n_is_done);
-	}
+#define expect_data(DATA, INIT, RUN, DESTROY, INTERRUPT, DONE) {\
+		EXPECT_EQ(INIT, DATA.n_init);\
+		EXPECT_EQ(RUN, DATA.n_run);\
+		EXPECT_EQ(DESTROY, DATA.n_destroy);\
+		EXPECT_EQ(INTERRUPT, DATA.n_interrupt);\
+		EXPECT_EQ(DONE, DATA.n_is_done);\
+}
 
-	TEST(SchedulerTest, AddRemove) {
+	TEST(SchedulerTest, StartStop) {
 		struct TestStruct data;
 		auto t = task_new(init, run, destroy, interrupt, is_done, &data);
 		auto s = scheduler_new();
 
-		scheduler_add(s, t);
-		expect_data(data, 1, 0, 0, 0, 0);
+		scheduler_start(s, t);
+		expect_data(data, 0, 0, 0, 0, 0);
 		EXPECT_EQ(1, list_size(&s->tasks));
 		EXPECT_EQ(&t->elem, list_begin(&s->tasks));
+		EXPECT_EQ(STARTING, t->state);
 
-		scheduler_remove(s, t);
-		expect_data(data, 1, 0, 1, 0, 0);
+		scheduler_run(s);
+		expect_data(data, 1, 1, 0, 0, 1);
+		EXPECT_EQ(RUNNING, t->state);
+
+		scheduler_stop(s, t);
+		expect_data(data, 1, 1, 0, 0, 1);
+		EXPECT_FALSE(list_empty(&s->tasks));
+		EXPECT_EQ(INTERRUPTED, t->state);
+
+		scheduler_run(s);
+		expect_data(data, 1, 1, 0, 1, 1);
+		EXPECT_FALSE(list_empty(&s->tasks));
+		EXPECT_EQ(STOPPED, t->state);
+
+		scheduler_run(s);
+		expect_data(data, 1, 1, 1, 1, 1);
 		EXPECT_TRUE(list_empty(&s->tasks));
+		EXPECT_EQ(STOPPED, t->state);
 
 		scheduler_free(s);
-		expect_data(data, 1, 0, 1, 0, 0);
+		expect_data(data, 1, 1, 1, 1, 1);
 	}
 
 	TEST(SchedulerTest, RemoveAtFree) {
@@ -108,18 +122,19 @@ namespace {
 		auto t = task_new(init, run, destroy, interrupt, is_done, &data);
 		auto s = scheduler_new();
 
-		scheduler_add(s, t);
-		expect_data(data, 1, 0, 0, 0, 0);
-		EXPECT_EQ(1, list_size(&s->tasks));
-		EXPECT_EQ(&t->elem, list_begin(&s->tasks));
+		scheduler_start(s, t);
+		expect_data(data, 0, 0, 0, 0, 0);
+		scheduler_run(s);
+		expect_data(data, 1, 1, 0, 0, 1);
 
 		scheduler_free(s);
-		expect_data(data, 1, 0, 1, 0, 0);
+		expect_data(data, 1, 1, 1, 1, 1);
 
 		task_free(t);
 	}
 
 	TEST(SchedulerTest, RunNoTasks) {
+		// I know, this is redudant and will never fail, But it's only 4 lines
 		auto s = scheduler_new();
 		scheduler_run(s);
 		scheduler_free(s);
@@ -131,31 +146,29 @@ namespace {
 		auto t = task_new(init, run, destroy, interrupt, is_done, &data);
 		auto s = scheduler_new();
 
-		scheduler_add(s, t);
-		expect_data(data, 1, 0, 0, 0, 0);
+		scheduler_start(s, t);
+		expect_data(data, 0, 0, 0, 0, 0);
 
 		scheduler_run(s);
 		scheduler_run(s);
 		expect_data(data, 1, 2, 0, 0, 2);
 
 		scheduler_free(s);
-		expect_data(data, 1, 2, 1, 0, 2);
+		expect_data(data, 1, 2, 1, 1, 2);
 
 		task_free(t);
 	}
 
-	TEST(SchedulerTest, RunTaskToDone) {
+	TEST(SchedulerTest, RunToDone) {
 		struct TestStruct data = { .is_one_shot = true };
 		auto s = scheduler_new();
 		auto t = task_new(init, run, destroy, interrupt, is_done, &data);
 
-		scheduler_add(s, t);
-		expect_data(data, 1, 0, 0, 0, 0);
-		EXPECT_FALSE(list_empty(&s->tasks));
+		scheduler_start(s, t);
+		expect_data(data, 0, 0, 0, 0, 0);
 
 		scheduler_run(s);
-		expect_data(data, 1, 1, 1, 0, 1);
-		EXPECT_TRUE(list_empty(&s->tasks));
+		expect_data(data, 1, 1, 0, 0, 1);
 
 		scheduler_run(s);
 		expect_data(data, 1, 1, 1, 0, 1);
@@ -166,21 +179,21 @@ namespace {
 		task_free(t);
 	}
 
-	TEST(SchedulerTest, RunOneShotTask) {
+	TEST(SchedulerTest, RunOneShot) {
 		struct TestStruct data = { .is_one_shot = true };
 		auto t = task_new(NULL, run, NULL, NULL, NULL, &data);
 		auto s = scheduler_new();
 
-		scheduler_add(s, t);
+		scheduler_start(s, t);
 		expect_data(data, 0, 0, 0, 0, 0);
+
+		scheduler_run(s);
+		expect_data(data, 0, 1, 0, 0, 0);
 		EXPECT_FALSE(list_empty(&s->tasks));
 
 		scheduler_run(s);
 		expect_data(data, 0, 1, 0, 0, 0);
 		EXPECT_TRUE(list_empty(&s->tasks));
-
-		scheduler_run(s);
-		expect_data(data, 0, 1, 0, 0, 0);
 
 		scheduler_free(s);
 		expect_data(data, 0, 1, 0, 0, 0);
@@ -198,8 +211,8 @@ namespace {
 		auto s = scheduler_new();
 
 		for (int i = 0; i < n; i++) {
-			scheduler_add(s, t[i]);
-			expect_data(data[i], 1, 0, 0, 0, 0);
+			scheduler_start(s, t[i]);
+			expect_data(data[i], 0, 0, 0, 0, 0);
 		}
 		EXPECT_EQ(n, list_size(&s->tasks));
 
@@ -215,8 +228,7 @@ namespace {
 
 		scheduler_free(s);
 		for (int i = 0; i < n; i++)
-			expect_data(data[i], 1, 2, 1, 0, 2);
-		EXPECT_TRUE(list_empty(&s->tasks));
+			expect_data(data[i], 1, 2, 1, 1, 2);
 
 		for (int i = 0; i < n; i++)
 			task_free(t[i]);
@@ -234,14 +246,14 @@ namespace {
 		auto s = scheduler_new();
 
 		for (int i = 0; i < 3; i++)
-			scheduler_add(s, t[i]);
-		expect_data(d0, 1, 0, 0, 0, 0);
-		expect_data(d1, 1, 0, 0, 0, 0);
+			scheduler_start(s, t[i]);
+		expect_data(d0, 0, 0, 0, 0, 0);
+		expect_data(d1, 0, 0, 0, 0, 0);
 		expect_data(d2, 0, 0, 0, 0, 0); // has no init
 
 		scheduler_run(s);
 		expect_data(d0, 1, 1, 0, 0, 1);
-		expect_data(d1, 1, 1, 1, 0, 1);
+		expect_data(d1, 1, 1, 0, 0, 1);
 		expect_data(d2, 0, 1, 0, 0, 0); // has no destroy
 
 		scheduler_run(s);
@@ -250,7 +262,7 @@ namespace {
 		expect_data(d2, 0, 1, 0, 0, 0); // should not run
 
 		scheduler_free(s);
-		expect_data(d0, 1, 2, 1, 0, 2);
+		expect_data(d0, 1, 2, 1, 1, 2);
 		expect_data(d1, 1, 1, 1, 0, 1); // should not destroy
 		expect_data(d2, 0, 1, 0, 0, 0); // should not destroy
 
