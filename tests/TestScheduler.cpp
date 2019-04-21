@@ -128,7 +128,7 @@ namespace {
 		expect_data(data, 1, 1, 0, 0, 1);
 
 		scheduler_free(s);
-		expect_data(data, 1, 1, 1, 1, 1);
+		expect_data(data, 1, 1, 1, 1, 2);
 
 		task_free(t);
 	}
@@ -154,7 +154,7 @@ namespace {
 		expect_data(data, 1, 2, 0, 0, 2);
 
 		scheduler_free(s);
-		expect_data(data, 1, 2, 1, 1, 2);
+		expect_data(data, 1, 2, 1, 1, 3);
 
 		task_free(t);
 	}
@@ -228,7 +228,7 @@ namespace {
 
 		scheduler_free(s);
 		for (int i = 0; i < n; i++)
-			expect_data(data[i], 1, 2, 1, 1, 2);
+			expect_data(data[i], 1, 2, 1, 1, 3);
 
 		for (int i = 0; i < n; i++)
 			task_free(t[i]);
@@ -262,12 +262,42 @@ namespace {
 		expect_data(d2, 0, 1, 0, 0, 0); // should not run
 
 		scheduler_free(s);
-		expect_data(d0, 1, 2, 1, 1, 2);
+		expect_data(d0, 1, 2, 1, 1, 3);
 		expect_data(d1, 1, 1, 1, 0, 1); // should not destroy
 		expect_data(d2, 0, 1, 0, 0, 0); // should not destroy
 
 		for (int i = 0; i < 3; i++)
 			task_free(t[i]);
+	}
+
+	TEST(SchedulerTest, StopNoRun) {
+		struct TestStruct data;
+		auto t = task_new(init, run, destroy, interrupt, is_done, &data);
+		auto s = scheduler_new();
+
+		scheduler_start(s, t);
+		expect_data(data, 0, 0, 0, 0, 0);
+		scheduler_stop(s, t);
+		expect_data(data, 0, 0, 0, 0, 0);
+
+		scheduler_free(s);
+		expect_data(data, 0, 0, 0, 0, 0);
+
+		task_free(t);
+	}
+
+	TEST(SchedulerTest, FreeNoRun) {
+		struct TestStruct data;
+		auto t = task_new(init, run, destroy, interrupt, is_done, &data);
+		auto s = scheduler_new();
+
+		scheduler_start(s, t);
+		expect_data(data, 0, 0, 0, 0, 0);
+
+		scheduler_free(s);
+		expect_data(data, 0, 0, 0, 0, 0);
+
+		task_free(t);
 	}
 
 	// new task
