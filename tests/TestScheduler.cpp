@@ -72,6 +72,8 @@ namespace {
 		EXPECT_EQ(NULL, s->tasks.tail.next);
 		EXPECT_EQ(0, pthread_mutex_lock(&s->tasks_lock));
 		EXPECT_EQ(0, pthread_mutex_unlock(&s->tasks_lock));
+		EXPECT_EQ(0, pthread_mutex_lock(&s->state_lock));
+		EXPECT_EQ(0, pthread_mutex_unlock(&s->state_lock));
 		scheduler_free(s);
 	}
 
@@ -300,17 +302,5 @@ namespace {
 		task_free(t);
 	}
 
-	// new task
-	// free task
-	// add a task
-	// remove task (remove and free)
-	// run w/ no task
-	// run w/ one task
-	// run w/ multi task
-	// run w/ oneshot
-	// free w/ no tasks
-	// free w/ one task
-	// free w/ multi tasks
-	// free w/ oneshot run
-	// free w/ oneshot not run
+	// mutli thread safety
 }
