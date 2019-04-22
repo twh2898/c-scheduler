@@ -19,6 +19,7 @@ $(TARGET): $(OBJECTS)
 $(TESTTARGET): $(TESTOBJECTS) $(OBJECTS)
 	$(CXX) -o testmain $(TESTOBJECTS) list.o $(CXXFLAGS) 
 
+tests/TestScheduler.o: scheduler.c scheduler.h
 list.o: list.c list.h
 scheduler.o: scheduler.c scheduler.h
 
