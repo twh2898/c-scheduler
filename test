@@ -1,4 +1,4 @@
 #!/bin/bash
 
-./build && ./testmain $*
+./build testmain && ./testmain $*
 
