@@ -2,7 +2,7 @@
 #CFLAGS = -O3 -Wall -Wmissing-prototypes -pthread
 # Debug flags
 CFLAGS = -g -O0 -Wall -Wextra -Wmissing-prototypes -pthread
-CXXFLAGS = -std=c++17 -Itests/gtest/googletests/include/ -Ltests/gtest/lib/ -lgtest -lpthread
+CXXFLAGS = -std=c++17 -Itests/googletest/googletests/include/ -Ltests/googletest/lib/ -lgtest -lpthread
 
 LDFLAGS = -lpthread
 
